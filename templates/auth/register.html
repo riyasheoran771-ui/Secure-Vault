@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+
+{% block title %}Register - SecureVault{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-[#0a0e1a] flex items-center justify-center p-4">
+    <div class="absolute top-1/4 left-1/4 w-96 h-96 rounded-full opacity-10" style="background: radial-gradient(circle, #0ea5e9 0%, transparent 70%);"></div>
+    <div class="absolute bottom-1/4 right-1/4 w-96 h-96 rounded-full opacity-10" style="background: radial-gradient(circle, #d946ef 0%, transparent 70%);"></div>
+    
+    <div class="w-full max-w-lg relative z-10">
+        <div class="text-center mb-8">
+            <a href="{{ url_for('index') }}" class="inline-flex items-center gap-3 mb-4">
+                <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-sky-500 to-fuchsia-500 flex items-center justify-center animate-glow">
+                    <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                    </svg>
+                </div>
+                <span class="text-2xl font-black gradient-text">SecureVault</span>
+            </a>
+            <h1 class="text-3xl font-black text-white">Create Account</h1>
+            <p class="text-slate-400 mt-2">Join thousands of secure document sharers</p>
+        </div>
+        
+        <div class="glass-card p-8">
+            <form method="POST" class="space-y-5">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                
+                <div>
+                    <label class="text-sm text-slate-400 font-medium mb-2 block">Full Name</label>
+                    <input type="text" name="full_name" class="input-vault" placeholder="John Doe" required>
+                </div>
+                
+                <div>
+                    <label class="text-sm text-slate-400 font-medium mb-2 block">Username</label>
+                    <input type="text" name="username" class="input-vault" placeholder="johndoe" required>
+                </div>
+                
+                <div>
+                    <label class="text-sm text-slate-400 font-medium mb-2 block">Email Address</label>
+                    <input type="email" name="email" class="input-vault" placeholder="john@example.com" required>
+                </div>
+                
+                <div>
+                    <label class="text-sm text-slate-400 font-medium mb-2 block">Phone Number <span class="text-slate-500">(Optional)</span></label>
+                    <input type="tel" name="phone" class="input-vault" placeholder="+1 234 567 8900">
+                </div>
+                
+                <div>
+                    <label class="text-sm text-slate-400 font-medium mb-2 block">Password</label>
+                    <input type="password" name="password" id="password" class="input-vault" placeholder="••••••••" required>
+                    <div id="password-strength" class="mt-2"></div>
+                </div>
+                
+                <div>
+                    <label class="text-sm text-slate-400 font-medium mb-2 block">Confirm Password</label>
+                    <input type="password" name="confirm_password" id="confirm_password" class="input-vault" placeholder="••••••••" required>
+                </div>
+                
+                <button type="submit" class="btn-primary w-full py-3 rounded-xl font-bold text-lg flex items-center justify-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                    </svg>
+                    Create Secure Account
+                </button>
+            </form>
+            
+            <p class="text-center text-slate-400 text-sm mt-6">
+                Already have an account?
+                <a href="{{ url_for('login') }}" class="text-sky-400 hover:text-sky-300 font-semibold">Sign In</a>
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const passwordInput = document.getElementById('password');
+const strengthDiv = document.getElementById('password-strength');
+const confirmInput = document.getElementById('confirm_password');
+
+passwordInput.addEventListener('input', function() {
+    const password = this.value;
+    const checks = [
+        { label: 'At least 8 characters', valid: password.length >= 8 },
+        { label: 'Uppercase letter', valid: /[A-Z]/.test(password) },
+        { label: 'Lowercase letter', valid: /[a-z]/.test(password) },
+        { label: 'Number', valid: /\d/.test(password) },
+        { label: 'Special character', valid: /[!@#$%^&*(),.?":{}|<>]/.test(password) }
+    ];
+    const score = checks.filter(c => c.valid).length;
+    const levels = ['', 'Very Weak', 'Weak', 'Fair', 'Good', 'Strong'];
+    const colors = ['', '#ef4444', '#f97316', '#f59e0b', '#3b82f6', '#22c55e'];
+    
+    if (!password) {
+        strengthDiv.innerHTML = '';
+        return;
+    }
+    
+    let html = `<div class="flex gap-1 mb-2">`;
+    for (let i = 1; i <= 5; i++) {
+        html += `<div class="h-1 flex-1 rounded-full transition-all ${i <= score ? '' : 'bg-[#1e2d4a]'}" style="${i <= score ? 'background:' + colors[score] : ''}"></div>`;
+    }
+    html += `</div>`;
+    html += `<div class="text-xs text-right mb-2" style="color:${colors[score]}">${levels[score]}</div>`;
+    html += `<div class="grid grid-cols-2 gap-1">`;
+    checks.forEach(c => {
+        const color = c.valid ? 'text-green-400' : 'text-slate-400';
+        const icon = c.valid ? '✓' : '○';
+        html += `<div class="flex items-center gap-1 text-xs ${color}"><span>${icon}</span>${c.label}</div>`;
+    });
+    html += `</div>`;
+    strengthDiv.innerHTML = html;
+});
+
+confirmInput.addEventListener('input', function() {
+    if (this.value && passwordInput.value !== this.value) {
+        this.style.borderColor = '#ef4444';
+    } else if (this.value) {
+        this.style.borderColor = '#22c55e';
+    } else {
+        this.style.borderColor = '';
+    }
+});
+</script>
+{% endblock %}

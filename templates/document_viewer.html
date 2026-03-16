@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ document.title }} - SecureVault</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background: #0a0e1a; margin: 0; padding: 0; }
+        .glass-card { background: rgba(30, 45, 74, 0.4); backdrop-filter: blur(12px); border: 1px solid rgba(56, 189, 248, 0.1); }
+        .btn-primary { background: linear-gradient(135deg, #0ea5e9, #d946ef); color: white; }
+        .btn-secondary { background: rgba(30, 45, 74, 0.6); color: #94a3b8; border: 1px solid rgba(56, 189, 248, 0.2); }
+        .btn-secondary:hover { background: rgba(56, 189, 248, 0.1); color: white; }
+        .gradient-text { background: linear-gradient(135deg, #0ea5e9, #d946ef); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        
+        /* Toolbar styles */
+        .toolbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            background: rgba(10, 14, 26, 0.95);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(56, 189, 248, 0.2);
+        }
+        
+        .doc-container {
+            margin-top: 70px;
+            min-height: calc(100vh - 70px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        /* Print styles */
+        {% if auto_print %}
+        body { background: white !important; }
+        .toolbar { display: none !important; }
+        .doc-container { margin-top: 0; padding: 0; }
+        {% endif %}
+        
+        @media print {
+            .toolbar { display: none !important; }
+            body { background: white !important; }
+            .doc-container { margin-top: 0; padding: 0; min-height: auto; }
+            .no-print { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Toolbar -->
+    <div class="toolbar no-print">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+            <!-- Left -->
+            <div class="flex items-center gap-4">
+                <a href="{{ url_for('share_view', token=document.share_token) }}" class="btn-secondary px-3 py-2 rounded-lg flex items-center gap-2 text-sm">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+                    Back
+                </a>
+                <div>
+                    <h1 class="text-white font-bold">{{ document.title }}</h1>
+                    <p class="text-slate-400 text-xs">{{ document.original_filename }} · {{ format_file_size(document.file_size) }}</p>
+                </div>
+            </div>
+            
+            <!-- Center - Zoom Controls -->
+            <div class="hidden md:flex items-center gap-2 bg-slate-800/50 rounded-lg px-3 py-1">
+                <button onclick="zoomOut()" class="p-1 text-slate-400 hover:text-white">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"/></svg>
+                </button>
+                <span id="zoomLevel" class="text-white text-sm w-12 text-center">100%</span>
+                <button onclick="zoomIn()" class="p-1 text-slate-400 hover:text-white">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                </button>
+                <button onclick="resetZoom()" class="p-1 text-slate-400 hover:text-white text-xs ml-2">Reset</button>
+            </div>
+            
+            <!-- Right - Actions -->
+            <div class="flex items-center gap-2">
+                {% if document.allow_download %}
+                <button onclick="downloadDoc()" class="btn-secondary px-3 py-2 rounded-lg flex items-center gap-2 text-sm">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                    Download
+                </button>
+                {% endif %}
+                {% if document.allow_print %}
+                <button onclick="openPrintModal()" class="btn-primary px-3 py-2 rounded-lg flex items-center gap-2 text-sm">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+                    Print
+                </button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Print Settings Modal -->
+    <div id="printModal" class="no-print fixed inset-0 z-[2000] hidden items-start justify-center bg-black/70 overflow-y-auto py-4" onclick="if(event.target === this) closePrintModal()">
+        <div class="bg-[#0a0e1a] border border-sky-500/30 rounded-2xl w-full max-w-md mx-4 shadow-2xl my-4 flex flex-col max-h-[90vh]">
+            <div class="flex items-center justify-between p-6 pb-4 border-b border-slate-700/50 shrink-0">
+                <h2 class="text-xl font-bold text-white flex items-center gap-2">
+                    <svg class="w-5 h-5 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+                    Print Settings
+                </h2>
+                <button onclick="closePrintModal()" class="text-slate-400 hover:text-white">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+            
+            <!-- Scrollable Content -->
+            <div class="overflow-y-auto p-6 pt-4 flex-1">
+                <!-- Paper Size -->
+                <div class="mb-5">
+                <label class="text-sm text-slate-400 mb-2 block">Paper Size</label>
+                <div class="grid grid-cols-3 gap-2">
+                    <button type="button" onclick="selectPaperSize(this, 'a4')" class="paper-size-btn active px-3 py-2 rounded-lg text-sm font-medium bg-sky-500/20 text-sky-400 border border-sky-500/30">A4</button>
+                    <button type="button" onclick="selectPaperSize(this, 'a3')" class="paper-size-btn px-3 py-2 rounded-lg text-sm font-medium bg-slate-800/50 text-slate-400 border border-slate-600/30 hover:border-sky-500/30 hover:text-sky-400">A3</button>
+                    <button type="button" onclick="selectPaperSize(this, 'a2')" class="paper-size-btn px-3 py-2 rounded-lg text-sm font-medium bg-slate-800/50 text-slate-400 border border-slate-600/30 hover:border-sky-500/30 hover:text-sky-400">A2</button>
+                    <button type="button" onclick="selectPaperSize(this, 'letter')" class="paper-size-btn px-3 py-2 rounded-lg text-sm font-medium bg-slate-800/50 text-slate-400 border border-slate-600/30 hover:border-sky-500/30 hover:text-sky-400">Letter</button>
+                    <button type="button" onclick="selectPaperSize(this, 'legal')" class="paper-size-btn px-3 py-2 rounded-lg text-sm font-medium bg-slate-800/50 text-slate-400 border border-slate-600/30 hover:border-sky-500/30 hover:text-sky-400">Legal</button>
+                    <button type="button" onclick="selectPaperSize(this, 'tabloid')" class="paper-size-btn px-3 py-2 rounded-lg text-sm font-medium bg-slate-800/50 text-slate-400 border border-slate-600/30 hover:border-sky-500/30 hover:text-sky-400">Tabloid</button>
+                </div>
+            </div>
+            
+            <!-- Orientation -->
+            <div class="mb-5">
+                <label class="text-sm text-slate-400 mb-2 block">Orientation</label>
+                <div class="grid grid-cols-2 gap-2">
+                    <button type="button" onclick="selectOrientation(this, 'portrait')" class="orientation-btn active px-4 py-3 rounded-lg text-sm font-medium bg-sky-500/20 text-sky-400 border border-sky-500/30 flex items-center justify-center gap-2">
+                        <svg class="w-4 h-5 border-2 border-current rounded" fill="none" viewBox="0 0 16 20"></svg>
+                        Portrait
+                    </button>
+                    <button type="button" onclick="selectOrientation(this, 'landscape')" class="orientation-btn px-4 py-3 rounded-lg text-sm font-medium bg-slate-800/50 text-slate-400 border border-slate-600/30 hover:border-sky-500/30 hover:text-sky-400 flex items-center justify-center gap-2">
+                        <svg class="w-5 h-4 border-2 border-current rounded" fill="none" viewBox="0 0 20 16"></svg>
+                        Landscape
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Margins -->
+            <div class="mb-6">
+                <label class="text-sm text-slate-400 mb-2 block">Margins</label>
+                <div class="grid grid-cols-3 gap-2">
+                    <button type="button" onclick="selectMargin(this, 'none')" class="margin-btn px-3 py-2 rounded-lg text-sm font-medium bg-slate-800/50 text-slate-400 border border-slate-600/30 hover:border-sky-500/30 hover:text-sky-400">None</button>
+                    <button type="button" onclick="selectMargin(this, 'normal')" class="margin-btn active px-3 py-2 rounded-lg text-sm font-medium bg-sky-500/20 text-sky-400 border border-sky-500/30">Normal</button>
+                    <button type="button" onclick="selectMargin(this, 'wide')" class="margin-btn px-3 py-2 rounded-lg text-sm font-medium bg-slate-800/50 text-slate-400 border border-slate-600/30 hover:border-sky-500/30 hover:text-sky-400">Wide</button>
+                </div>
+            </div>
+            
+            <!-- Scale -->
+            <div class="mb-4">
+                <label class="text-sm text-slate-400 mb-2 block">Scale: <span id="scaleValue">100</span>%</label>
+                <input type="range" id="printScale" min="50" max="150" value="100" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-sky-500" onchange="updateScaleValue()">
+            </div>
+            
+            <!-- Advanced Settings Toggle -->
+            <div class="mb-4">
+                <button type="button" onclick="toggleAdvancedSettings()" class="w-full flex items-center justify-between px-4 py-2 rounded-lg bg-slate-800/50 border border-slate-600/30 text-slate-400 hover:text-sky-400 hover:border-sky-500/30 transition-colors">
+                    <span class="flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                        Advanced Settings
+                    </span>
+                    <svg id="advancedToggleIcon" class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                </button>
+            </div>
+            
+            <!-- Advanced Settings Panel -->
+            <div id="advancedSettings" class="hidden mb-4 p-4 rounded-lg bg-slate-900/50 border border-slate-700/50">
+                <!-- Page Break Mode -->
+                <div class="mb-4">
+                    <label class="text-sm text-slate-400 mb-2 block">Page Break Mode</label>
+                    <div class="grid grid-cols-3 gap-2">
+                        <button type="button" onclick="selectPageBreakMode(this, 'auto')" class="page-break-btn active px-3 py-2 rounded-lg text-xs font-medium bg-sky-500/20 text-sky-400 border border-sky-500/30">Auto</button>
+                        <button type="button" onclick="selectPageBreakMode(this, 'fit')" class="page-break-btn px-3 py-2 rounded-lg text-xs font-medium bg-slate-800/50 text-slate-400 border border-slate-600/30 hover:border-sky-500/30 hover:text-sky-400">Fit to Page</button>
+                        <button type="button" onclick="selectPageBreakMode(this, 'custom')" class="page-break-btn px-3 py-2 rounded-lg text-xs font-medium bg-slate-800/50 text-slate-400 border border-slate-600/30 hover:border-sky-500/30 hover:text-sky-400">Custom</button>
+                    </div>
+                </div>
+                
+                <!-- Custom Page Height (for custom mode) -->
+                <div id="customPageHeightSection" class="mb-4 hidden">
+                    <label class="text-sm text-slate-400 mb-2 block">Content Height per Page (cm)</label>
+                    <div class="flex items-center gap-3">
+                        <input type="number" id="pageHeightInput" min="5" max="50" value="25" class="flex-1 px-3 py-2 rounded-lg bg-slate-800/50 border border-slate-600/30 text-white text-sm focus:border-sky-500/50 focus:outline-none" onchange="updatePageHeight()">
+                        <span class="text-slate-400 text-sm">cm</span>
+                    </div>
+                    <p class="text-xs text-slate-500 mt-1">Set where page ends and next page begins</p>
+                </div>
+                
+                <!-- Rows per Page (for custom mode) -->
+                <div id="rowsPerPageSection" class="mb-4 hidden">
+                    <label class="text-sm text-slate-400 mb-2 block">Rows / Lines per Page</label>
+                    <div class="flex items-center gap-3">
+                        <input type="number" id="rowsPerPageInput" min="10" max="100" value="50" class="flex-1 px-3 py-2 rounded-lg bg-slate-800/50 border border-slate-600/30 text-white text-sm focus:border-sky-500/50 focus:outline-none" onchange="updateRowsPerPage()">
+                        <span class="text-slate-400 text-sm">lines</span>
+                    </div>
+                </div>
+                
+                <!-- Page Break Before -->
+                <div class="mb-4">
+                    <label class="text-sm text-slate-400 mb-2 block">Add Page Break After</label>
+                    <div class="flex items-center gap-2">
+                        <input type="number" id="breakAfterPage" min="1" max="100" value="1" class="w-20 px-3 py-2 rounded-lg bg-slate-800/50 border border-slate-600/30 text-white text-sm focus:border-sky-500/50 focus:outline-none">
+                        <span class="text-slate-400 text-sm">pages</span>
+                        <button type="button" onclick="addPageBreak()" class="px-3 py-2 rounded-lg bg-fuchsia-500/20 text-fuchsia-400 border border-fuchsia-500/30 text-sm hover:bg-fuchsia-500/30">+ Add Break</button>
+                    </div>
+                    <div id="pageBreaksList" class="mt-2 flex flex-wrap gap-2"></div>
+                </div>
+                
+                <!-- Header/Footer -->
+                <div class="mb-4">
+                    <label class="text-sm text-slate-400 mb-2 block">Header & Footer</label>
+                    <div class="flex flex-col gap-2">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" id="showHeader" class="w-4 h-4 rounded border-slate-600 bg-slate-800/50 text-sky-500 focus:ring-sky-500/50" onchange="updateHeaderFooter()">
+                            <span class="text-sm text-slate-300">Show page numbers</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" id="showDocTitle" class="w-4 h-4 rounded border-slate-600 bg-slate-800/50 text-sky-500 focus:ring-sky-500/50" checked onchange="updateHeaderFooter()">
+                            <span class="text-sm text-slate-300">Show document title</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" id="showDate" class="w-4 h-4 rounded border-slate-600 bg-slate-800/50 text-sky-500 focus:ring-sky-500/50" onchange="updateHeaderFooter()">
+                            <span class="text-sm text-slate-300">Show print date</span>
+                        </label>
+                    </div>
+                </div>
+                
+                <!-- Background -->
+                <div>
+                    <label class="text-sm text-slate-400 mb-2 block">Background</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button type="button" onclick="selectBackground(this, 'white')" class="bg-btn active px-3 py-2 rounded-lg text-xs font-medium bg-sky-500/20 text-sky-400 border border-sky-500/30 flex items-center justify-center gap-2">
+                            <span class="w-4 h-4 rounded bg-white border border-slate-300"></span>
+                            White
+                        </button>
+                        <button type="button" onclick="selectBackground(this, 'default')" class="bg-btn px-3 py-2 rounded-lg text-xs font-medium bg-slate-800/50 text-slate-400 border border-slate-600/30 hover:border-sky-500/30 hover:text-sky-400 flex items-center justify-center gap-2">
+                            <span class="w-4 h-4 rounded bg-slate-100 border border-slate-300"></span>
+                            Default
+                        </button>
+                    </div>
+                </div>
+            </div>
+            </div>
+            
+            <!-- Actions - Fixed at bottom -->
+            <div class="flex gap-3 p-6 pt-4 border-t border-slate-700/50 shrink-0 bg-[#0a0e1a]">
+                <button onclick="closePrintModal()" class="flex-1 btn-secondary px-4 py-3 rounded-xl text-sm font-medium">Cancel</button>
+                <button onclick="executePrint()" class="flex-1 btn-primary px-4 py-3 rounded-xl text-sm font-medium flex items-center justify-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+                    Print
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Document Content -->
+    <div class="doc-container" id="docContainer">
+        <div id="docContent" style="transform-origin: center top; transition: transform 0.2s;">
+            {% if document.file_type in ['pdf'] %}
+            <!-- PDF -->
+            <div style="width: 100%; max-width: 900px; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);">
+                <canvas id="pdfCanvas" style="width: 100%;"></canvas>
+            </div>
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+            <script>
+                pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+                
+                async function renderPDF() {
+                    const url = '{{ url_for("serve_document", token=document.share_token) }}';
+                    const pdf = await pdfjsLib.getDocument(url).promise;
+                    const canvas = document.getElementById('pdfCanvas');
+                    const ctx = canvas.getContext('2d');
+                    
+                    for (let i = 1; i <= pdf.numPages; i++) {
+                        const page = await pdf.getPage(i);
+                        const viewport = page.getViewport({ scale: 1.5 });
+                        
+                        if (i === 1) {
+                            canvas.width = viewport.width;
+                            canvas.height = viewport.height * pdf.numPages;
+                        }
+                        
+                        await page.render({
+                            canvasContext: ctx,
+                            viewport: viewport
+                        }).promise;
+                        
+                        if (i < pdf.numPages) {
+                            ctx.translate(0, viewport.height);
+                        }
+                    }
+                }
+                renderPDF();
+            </script>
+            
+            {% elif document.file_type in ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'] %}
+            <!-- Image -->
+            <div style="background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);">
+                <img src="{{ url_for('serve_document', token=document.share_token) }}" 
+                     alt="{{ document.title }}"
+                     style="max-width: 100%; max-height: calc(100vh - 120px); display: block;"
+                     id="docImage">
+            </div>
+            
+            {% else %}
+            <!-- Other files - fallback iframe -->
+            <div style="width: 100%; height: calc(100vh - 120px); background: white; border-radius: 12px; overflow: hidden;">
+                <iframe src="{{ url_for('serve_document', token=document.share_token) }}" 
+                        style="width: 100%; height: 100%; border: none;">
+                </iframe>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <script>
+        // Print settings
+        let printSettings = {
+            paperSize: 'a4',
+            orientation: 'portrait',
+            margin: 'normal',
+            scale: 100,
+            pageBreakMode: 'auto',
+            pageHeight: 25,
+            rowsPerPage: 50,
+            pageBreaks: [],
+            showPageNumbers: false,
+            showDocTitle: true,
+            showDate: false,
+            background: 'white'
+        };
+        
+        // Paper sizes in mm (width x height)
+        const paperSizes = {
+            a4: { width: 210, height: 297 },
+            a3: { width: 297, height: 420 },
+            a2: { width: 420, height: 594 },
+            letter: { width: 215.9, height: 279.4 },
+            legal: { width: 215.9, height: 355.6 },
+            tabloid: { width: 279.4, height: 431.8 }
+        };
+        
+        // Margin sizes in mm
+        const marginSizes = {
+            none: 0,
+            normal: 10,
+            wide: 25
+        };
+        
+        // Modal functions
+        function openPrintModal() {
+            document.getElementById('printModal').classList.remove('hidden');
+            document.getElementById('printModal').classList.add('flex');
+        }
+        
+        function closePrintModal() {
+            document.getElementById('printModal').classList.add('hidden');
+            document.getElementById('printModal').classList.remove('flex');
+        }
+        
+        // Toggle advanced settings
+        function toggleAdvancedSettings() {
+            const panel = document.getElementById('advancedSettings');
+            const icon = document.getElementById('advancedToggleIcon');
+            panel.classList.toggle('hidden');
+            icon.classList.toggle('rotate-180');
+        }
+        
+        // Selection functions
+        function selectPaperSize(btn, size) {
+            document.querySelectorAll('.paper-size-btn').forEach(b => {
+                b.classList.remove('active', 'bg-sky-500/20', 'text-sky-400', 'border-sky-500/30');
+                b.classList.add('bg-slate-800/50', 'text-slate-400', 'border-slate-600/30');
+            });
+            btn.classList.add('active', 'bg-sky-500/20', 'text-sky-400', 'border-sky-500/30');
+            btn.classList.remove('bg-slate-800/50', 'text-slate-400', 'border-slate-600/30');
+            printSettings.paperSize = size;
+        }
+        
+        function selectOrientation(btn, orientation) {
+            document.querySelectorAll('.orientation-btn').forEach(b => {
+                b.classList.remove('active', 'bg-sky-500/20', 'text-sky-400', 'border-sky-500/30');
+                b.classList.add('bg-slate-800/50', 'text-slate-400', 'border-slate-600/30');
+            });
+            btn.classList.add('active', 'bg-sky-500/20', 'text-sky-400', 'border-sky-500/30');
+            btn.classList.remove('bg-slate-800/50', 'text-slate-400', 'border-slate-600/30');
+            printSettings.orientation = orientation;
+        }
+        
+        function selectMargin(btn, margin) {
+            document.querySelectorAll('.margin-btn').forEach(b => {
+                b.classList.remove('active', 'bg-sky-500/20', 'text-sky-400', 'border-sky-500/30');
+                b.classList.add('bg-slate-800/50', 'text-slate-400', 'border-slate-600/30');
+            });
+            btn.classList.add('active', 'bg-sky-500/20', 'text-sky-400', 'border-sky-500/30');
+            btn.classList.remove('bg-slate-800/50', 'text-slate-400', 'border-slate-600/30');
+            printSettings.margin = margin;
+        }
+        
+        function updateScaleValue() {
+            const scale = document.getElementById('printScale').value;
+            document.getElementById('scaleValue').textContent = scale;
+            printSettings.scale = parseInt(scale);
+        }
+        
+        // Page break mode
+        function selectPageBreakMode(btn, mode) {
+            document.querySelectorAll('.page-break-btn').forEach(b => {
+                b.classList.remove('active', 'bg-sky-500/20', 'text-sky-400', 'border-sky-500/30');
+                b.classList.add('bg-slate-800/50', 'text-slate-400', 'border-slate-600/30');
+            });
+            btn.classList.add('active', 'bg-sky-500/20', 'text-sky-400', 'border-sky-500/30');
+            btn.classList.remove('bg-slate-800/50', 'text-slate-400', 'border-slate-600/30');
+            printSettings.pageBreakMode = mode;
+            
+            // Show/hide custom options
+            const customHeight = document.getElementById('customPageHeightSection');
+            const rowsSection = document.getElementById('rowsPerPageSection');
+            if (mode === 'custom') {
+                customHeight.classList.remove('hidden');
+                rowsSection.classList.remove('hidden');
+            } else {
+                customHeight.classList.add('hidden');
+                rowsSection.classList.add('hidden');
+            }
+        }
+        
+        function updatePageHeight() {
+            printSettings.pageHeight = parseInt(document.getElementById('pageHeightInput').value);
+        }
+        
+        function updateRowsPerPage() {
+            printSettings.rowsPerPage = parseInt(document.getElementById('rowsPerPageInput').value);
+        }
+        
+        // Page breaks
+        function addPageBreak() {
+            const pageNum = parseInt(document.getElementById('breakAfterPage').value);
+            if (!printSettings.pageBreaks.includes(pageNum)) {
+                printSettings.pageBreaks.push(pageNum);
+                renderPageBreaks();
+            }
+        }
+        
+        function removePageBreak(pageNum) {
+            printSettings.pageBreaks = printSettings.pageBreaks.filter(p => p !== pageNum);
+            renderPageBreaks();
+        }
+        
+        function renderPageBreaks() {
+            const container = document.getElementById('pageBreaksList');
+            container.innerHTML = printSettings.pageBreaks.sort((a, b) => a - b).map(p => `
+                <span class="inline-flex items-center gap-1 px-2 py-1 rounded bg-fuchsia-500/20 text-fuchsia-400 text-xs">
+                    After page ${p}
+                    <button onclick="removePageBreak(${p})" class="hover:text-white">×</button>
+                </span>
+            `).join('');
+        }
+        
+        // Header & Footer
+        function updateHeaderFooter() {
+            printSettings.showPageNumbers = document.getElementById('showHeader').checked;
+            printSettings.showDocTitle = document.getElementById('showDocTitle').checked;
+            printSettings.showDate = document.getElementById('showDate').checked;
+        }
+        
+        // Background
+        function selectBackground(btn, bg) {
+            document.querySelectorAll('.bg-btn').forEach(b => {
+                b.classList.remove('active', 'bg-sky-500/20', 'text-sky-400', 'border-sky-500/30');
+                b.classList.add('bg-slate-800/50', 'text-slate-400', 'border-slate-600/30');
+            });
+            btn.classList.add('active', 'bg-sky-500/20', 'text-sky-400', 'border-sky-500/30');
+            btn.classList.remove('bg-slate-800/50', 'text-slate-400', 'border-slate-600/30');
+            printSettings.background = bg;
+        }
+        
+        // Execute print with settings
+        function executePrint() {
+            closePrintModal();
+            
+            const paper = paperSizes[printSettings.paperSize];
+            const margin = marginSizes[printSettings.margin];
+            
+            // Generate page break CSS
+            let pageBreakCSS = '';
+            
+            if (printSettings.pageBreakMode === 'custom') {
+                // Custom height per page
+                pageBreakCSS = `
+                    #docContent > div {
+                        page-break-after: always;
+                        height: ${printSettings.pageHeight}cm;
+                        overflow: hidden;
+                    }
+                `;
+            } else if (printSettings.pageBreakMode === 'fit') {
+                // Fit to page - avoid breaking inside elements
+                pageBreakCSS = `
+                    #docContent img,
+                    #docContent canvas,
+                    #docContent > div {
+                        page-break-inside: avoid;
+                    }
+                `;
+            }
+            
+            // Custom page breaks
+            printSettings.pageBreaks.forEach(pageNum => {
+                // This would need actual implementation based on content structure
+                pageBreakCSS += `
+                    .page-${pageNum} { page-break-after: always; }
+                `;
+            });
+            
+            // Header/Footer CSS
+            let headerFooterCSS = '';
+            if (printSettings.showPageNumbers || printSettings.showDocTitle || printSettings.showDate) {
+                const today = new Date().toLocaleDateString();
+                headerFooterCSS = `
+                    @page {
+                        @bottom-center {
+                            content: ${printSettings.showPageNumbers ? 'counter(page) " / " counter(pages)' : '""'};
+                        }
+                        @top-center {
+                            content: "${printSettings.showDocTitle ? '{{ document.title }}' : ''}${printSettings.showDate ? ' - ' + today : ''}";
+                            font-size: 10px;
+                            color: #666;
+                        }
+                    }
+                `;
+            }
+            
+            // Background color
+            const bgColor = printSettings.background === 'white' ? '#ffffff' : '#f8fafc';
+            
+            // Create print style
+            const printStyle = document.createElement('style');
+            printStyle.id = 'print-custom-style';
+            printStyle.textContent = `
+                @page {
+                    size: ${printSettings.paperSize.toUpperCase()} ${printSettings.orientation};
+                    margin: ${margin}mm;
+                }
+                @media print {
+                    body { 
+                        background: ${bgColor} !important;
+                        -webkit-print-color-adjust: exact !important;
+                        print-color-adjust: exact !important;
+                    }
+                    #docContent {
+                        transform: scale(${printSettings.scale / 100}) !important;
+                    }
+                    .doc-container {
+                        background: ${bgColor} !important;
+                    }
+                    ${pageBreakCSS}
+                }
+                ${headerFooterCSS}
+            `;
+            document.head.appendChild(printStyle);
+            
+            // Trigger print
+            setTimeout(function() {
+                window.print();
+                // Clean up after print
+                setTimeout(function() {
+                    const style = document.getElementById('print-custom-style');
+                    if (style) style.remove();
+                }, 100);
+            }, 100);
+        }
+        
+        // Zoom controls
+        let zoomLevel = 100;
+        
+        function zoomIn() {
+            zoomLevel = Math.min(zoomLevel + 10, 200);
+            applyZoom();
+        }
+        
+        function zoomOut() {
+            zoomLevel = Math.max(zoomLevel - 10, 50);
+            applyZoom();
+        }
+        
+        function resetZoom() {
+            zoomLevel = 100;
+            applyZoom();
+        }
+        
+        function applyZoom() {
+            document.getElementById('docContent').style.transform = `scale(${zoomLevel / 100})`;
+            document.getElementById('zoomLevel').textContent = zoomLevel + '%';
+        }
+        
+        // Download
+        function downloadDoc() {
+            window.location.href = '{{ url_for("download_document", token=document.share_token) }}';
+        }
+        
+        // Auto-print if print mode
+        {% if auto_print %}
+        window.onload = function() {
+            setTimeout(function() {
+                openPrintModal();
+            }, 500);
+        };
+        {% endif %}
+    </script>
+</body>
+</html>

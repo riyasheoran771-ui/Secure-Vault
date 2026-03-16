@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Share View - SecureVault{% endblock %}
+{% block content %}
+<div class="min-h-screen bg-[#0a0e1a] flex items-center justify-center p-6">
+<div class="max-w-3xl w-full">
+<div class="text-center mb-8">
+<div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-sky-500 to-fuchsia-500 flex items-center justify-center mx-auto mb-4 animate-glow"><svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg></div>
+<h1 class="text-3xl font-black text-white">Secure <span class="gradient-text">Document</span></h1>
+<p class="text-slate-400 mt-2">This document is protected by SecureVault</p>
+</div>
+<div class="glass-card p-6 rounded-2xl mb-6">
+<div class="flex items-center gap-4 mb-6 pb-4 border-b border-[#1e2d4a]">
+<div class="w-12 h-12 rounded-xl bg-sky-500/10 flex items-center justify-center"><svg class="w-6 h-6 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg></div>
+<div class="flex-1">
+<h2 class="text-xl font-bold text-white">{{ document.title }}</h2>
+<p class="text-slate-400 text-sm">{{ document.original_filename }}</p>
+</div>
+<span class="badge badge-active">{{ document.file_type|upper }}</span>
+</div>
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center text-sm mb-6">
+<div class="glass-card-light p-3 rounded-lg"><div class="text-slate-400 text-xs">Size</div><div class="text-white font-semibold">{{ format_file_size(document.file_size) }}</div></div>
+<div class="glass-card-light p-3 rounded-lg"><div class="text-slate-400 text-xs">Views</div><div class="text-white font-semibold">{{ document.current_views }}{% if document.view_limit > 0 %}/{{ document.view_limit }}{% endif %}</div></div>
+<div class="glass-card-light p-3 rounded-lg"><div class="text-slate-400 text-xs">Expires</div><div class="text-white font-semibold">{{ document.expiry_date.strftime('%b %d') if document.expiry_date else 'Never' }}</div></div>
+<div class="glass-card-light p-3 rounded-lg"><div class="text-slate-400 text-xs">Device</div><div class="text-white font-semibold capitalize">{{ document.device_restriction }}</div></div>
+</div>
+{% if requires_password %}
+<form method="POST" class="space-y-4">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<div class="text-center"><svg class="w-12 h-12 text-fuchsia-400 mx-auto mb-4 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg><h3 class="text-lg font-bold text-white mb-2">Password Required</h3><p class="text-slate-400 text-sm">Enter the password to access this document</p></div>
+<input type="password" name="password" class="input-vault text-center" placeholder="Enter password" autofocus>
+<button type="submit" class="btn-primary w-full py-3 rounded-xl font-bold">Unlock Document</button>
+</form>
+{% else %}
+<div class="text-center"><svg class="w-12 h-12 text-green-400 mx-auto mb-4 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg><h3 class="text-lg font-bold text-white mb-2">Access Granted</h3><p class="text-slate-400 text-sm mb-6">You have permission to access this document</p>
+<div class="flex flex-wrap justify-center gap-3">
+<a href="{{ url_for('view_document', token=document.share_token) }}" class="btn-primary px-6 py-3 rounded-xl flex items-center gap-2"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>View</a>
+{% if document.allow_download %}<a href="{{ url_for('download_document', token=document.share_token) }}" class="btn-secondary px-6 py-3 rounded-xl flex items-center gap-2"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>Download</a>{% endif %}
+{% if document.allow_print %}<a href="{{ url_for('print_document', token=document.share_token) }}" class="btn-secondary px-6 py-3 rounded-xl flex items-center gap-2"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>Print</a>{% endif %}
+</div>
+</div>
+{% endif %}
+</div>
+{% if not requires_password and device_info %}
+<div class="glass-card-light p-4 rounded-xl text-center text-xs text-slate-400">Your device: {{ device_info.device_name }} · {{ device_info.browser }} · {{ device_info.os }}</div>
+{% endif %}
+</div>
+</div>
+{% endblock %}
